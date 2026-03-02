@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Data Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --surface: #17171b;
+    --border: #2a2a32;
+    --accent: #c8f060;
+    --accent2: #60c8f0;
+    --text: #e8e8ec;
+    --muted: #6a6a7a;
+    --danger: #f06060;
+    --row-hover: #1e1e26;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(200,240,96,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(200,240,96,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* Header */
+  header {
+    padding: 48px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .logo-area h1 {
+    font-family: 'Fraunces', serif;
+    font-size: 2.4rem;
+    font-weight: 300;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .logo-area h1 span {
+    color: var(--accent);
+    font-style: italic;
+  }
+
+  .logo-area p {
+    color: var(--muted);
+    margin-top: 6px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .stats-bar {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+
+  .stat {
+    text-align: right;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--accent);
+    font-family: 'Fraunces', serif;
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--surface);
+    margin-bottom: 32px;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(200,240,96,0.04);
+  }
+
+  .upload-icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .upload-zone h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 1.2rem;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .upload-zone p {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .upload-zone input[type="file"] {
+    display: none;
+  }
+
+  .file-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+    justify-content: center;
+  }
+
+  .file-chip {
+    background: rgba(200,240,96,0.1);
+    border: 1px solid rgba(200,240,96,0.3);
+    color: var(--accent);
+    padding: 4px 12px;
+    border-radius: 100px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .file-chip button {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    opacity: 0.6;
+  }
+
+  .file-chip button:hover { opacity: 1; }
+
+  /* Controls */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 12px;
+    margin-bottom: 20px;
+    align-items: center;
+  }
+
+  .search-wrap {
+    position: relative;
+  }
+
+  .search-wrap::before {
+    content: '⌕';
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 16px;
+    pointer-events: none;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    padding: 10px 14px 10px 38px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); }
+
+  .btn {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-accent {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0f0f11;
+    font-weight: 500;
+  }
+
+  .btn-accent:hover { background: #d8ff70; border-color: #d8ff70; color: #0f0f11; }
+
+  /* Filters row */
+  .filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+  }
+
+  .filter-group label {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  select {
+    background: transparent;
+    border: none;
+    color: var(--accent2);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    max-width: 160px;
+  }
+
+  select option { background: var(--surface); color: var(--text); }
+
+  /* Table */
+  .table-wrap {
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    overflow: auto;
+    background: var(--surface);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 600px;
+  }
+
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg);
+  }
+
+  th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    border-bottom: 1.5px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition: color 0.15s;
+  }
+
+  th:hover { color: var(--accent); }
+
+  th.sort-asc::after { content: ' ↑'; color: var(--accent); }
+  th.sort-desc::after { content: ' ↓'; color: var(--accent); }
+
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  tbody tr {
+    transition: background 0.1s;
+  }
+
+  tbody tr:hover { background: var(--row-hover); }
+
+  .highlight {
+    background: rgba(200,240,96,0.25);
+    color: var(--accent);
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
+  /* Source badge */
+  .source-badge {
+    display: inline-block;
+    background: rgba(96,200,240,0.1);
+    border: 1px solid rgba(96,200,240,0.2);
+    color: var(--accent2);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 6px;
+  }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .pagination-info {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .pagination-btns {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .page-btn {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .page-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .page-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,240,96,0.08); }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 64px 24px;
+    color: var(--muted);
+  }
+
+  .empty-state .icon { font-size: 2.5rem; display: block; margin-bottom: 12px; }
+
+  .empty-state p { font-size: 11px; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--accent);
+    color: #0f0f11;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 0.3s;
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  @media (max-width: 640px) {
+    .controls { grid-template-columns: 1fr; }
+    header { flex-direction: column; align-items: flex-start; }
+    .stats-bar { flex-direction: row; }
+    .logo-area h1 { font-size: 1.8rem; }
+  }
+
+  /* Fade-in animation */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-in { animation: fadeUp 0.4s ease forwards; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo-area">
+      <h1>Lab <span>Data</span> Explorer</h1>
+      <p>CSV lookup tool &mdash; drop files to begin</p>
+    </div>
+    <div class="stats-bar" id="statsBar" style="display:none">
+      <div class="stat">
+        <div class="stat-value" id="statRows">0</div>
+        <div class="stat-label">Total Rows</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="statCols">0</div>
+        <div class="stat-label">Columns</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="statFiles">0</div>
+        <div class="stat-label">Files</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".csv" multiple>
+    <span class="upload-icon">⌗</span>
+    <h2>Drop CSV files here</h2>
+    <p>Or click to browse &mdash; multiple files with the same columns are merged automatically</p>
+    <div class="file-chips" id="fileChips"></div>
+  </div>
+
+  <!-- Controls -->
+  <div id="dataPanel" style="display:none">
+    <div class="controls">
+      <div class="search-wrap">
+        <input type="text" id="searchInput" placeholder="Search across all columns…">
+      </div>
+      <button class="btn" id="clearFiltersBtn">✕ Clear</button>
+      <button class="btn btn-accent" id="downloadBtn">↓ Download CSV</button>
+    </div>
+
+    <div class="filters-row" id="filtersRow"></div>
+
+    <div class="table-wrap">
+      <table id="dataTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <div id="emptyState" class="empty-state" style="display:none">
+        <span class="icon">◌</span>
+        <p>No records match your filters.</p>
+      </div>
+    </div>
+
+    <div class="pagination" id="pagination"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────
+let allData = [];        // all rows across files
+let headers = [];        // column headers
+let fileNames = [];      // loaded file names
+let filtered = [];       // current filtered+searched rows
+let sortCol = null;
+let sortDir = 'asc';
+let page = 1;
+const PAGE_SIZE = 50;
+let columnFilters = {};  // col -> value
+
+// ── Upload ───────────────────────────────────────────────────────
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => loadFiles(e.target.files));
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  loadFiles(e.dataTransfer.files);
+});
+
+function loadFiles(files) {
+  const csvFiles = Array.from(files).filter(f => f.name.endsWith('.csv'));
+  if (!csvFiles.length) { showToast('Please drop .csv files only'); return; }
+
+  let pending = csvFiles.length;
+
+  csvFiles.forEach(file => {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: result => {
+        const rows = result.data.map(row => ({ ...row, __source: file.name }));
+
+        if (headers.length === 0) {
+          headers = result.meta.fields;
+        }
+
+        // Merge rows; add source column
+        allData = [...allData, ...rows];
+        if (!fileNames.includes(file.name)) fileNames.push(file.name);
+
+        pending--;
+        if (pending === 0) {
+          renderFileChips();
+          updateStats();
+          buildFilters();
+          applyFilters();
+          document.getElementById('dataPanel').style.display = 'block';
+          document.getElementById('dataPanel').classList.add('animate-in');
+          showToast(`Loaded ${fileNames.length} file(s) — ${allData.length} rows`);
+        }
+      }
+    });
+  });
+}
+
+function renderFileChips() {
+  const container = document.getElementById('fileChips');
+  container.innerHTML = fileNames.map(n => `
+    <span class="file-chip">
+      ${n}
+      <button onclick="removeFile('${n}')" title="Remove">×</button>
+    </span>`).join('');
+}
+
+function removeFile(name) {
+  fileNames = fileNames.filter(f => f !== name);
+  allData = allData.filter(r => r.__source !== name);
+  if (fileNames.length === 0) {
+    headers = [];
+    columnFilters = {};
+    document.getElementById('dataPanel').style.display = 'none';
+    document.getElementById('statsBar').style.display = 'none';
+  }
+  renderFileChips();
+  updateStats();
+  buildFilters();
+  applyFilters();
+}
+
+function updateStats() {
+  document.getElementById('statRows').textContent = allData.length.toLocaleString();
+  document.getElementById('statCols').textContent = headers.length;
+  document.getElementById('statFiles').textContent = fileNames.length;
+  document.getElementById('statsBar').style.display = allData.length ? 'flex' : 'none';
+}
+
+// ── Filters ──────────────────────────────────────────────────────
+function buildFilters() {
+  const row = document.getElementById('filtersRow');
+  if (!headers.length) { row.innerHTML = ''; return; }
+
+  const selectableCols = headers.slice(0, 8); // up to 8 filter dropdowns
+  row.innerHTML = selectableCols.map(col => {
+    const values = [...new Set(allData.map(r => r[col]).filter(Boolean))].sort();
+    if (values.length < 2 || values.length > 200) return ''; // skip cols with too few or too many unique vals
+    return `
+      <div class="filter-group">
+        <label>${col}</label>
+        <select onchange="setFilter('${col}', this.value)">
+          <option value="">All</option>
+          ${values.map(v => `<option value="${v}">${v}</option>`).join('')}
+        </select>
+      </div>`;
+  }).join('');
+}
+
+function setFilter(col, val) {
+  if (val === '') delete columnFilters[col];
+  else columnFilters[col] = val;
+  page = 1;
+  applyFilters();
+}
+
+document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+  columnFilters = {};
+  document.getElementById('searchInput').value = '';
+  sortCol = null; sortDir = 'asc';
+  document.querySelectorAll('#filtersRow select').forEach(s => s.value = '');
+  page = 1;
+  applyFilters();
+});
+
+// ── Search ───────────────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', () => { page = 1; applyFilters(); });
+
+function applyFilters() {
+  const query = document.getElementById('searchInput').value.toLowerCase().trim();
+
+  filtered = allData.filter(row => {
+    // column filters
+    for (const [col, val] of Object.entries(columnFilters)) {
+      if (row[col] !== val) return false;
+    }
+    // search
+    if (query) {
+      return headers.some(h => String(row[h] ?? '').toLowerCase().includes(query));
+    }
+    return true;
+  });
+
+  // Sort
+  if (sortCol) {
+    filtered.sort((a, b) => {
+      const av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
+      const n = parseFloat(av), m = parseFloat(bv);
+      const cmp = (!isNaN(n) && !isNaN(m)) ? n - m : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }
+
+  renderTable();
+  renderPagination();
+  document.getElementById('statRows').textContent = filtered.length.toLocaleString();
+}
+
+// ── Table ────────────────────────────────────────────────────────
+function renderTable() {
+  const query = document.getElementById('searchInput').value.toLowerCase().trim();
+  const start = (page - 1) * PAGE_SIZE;
+  const pageRows = filtered.slice(start, start + PAGE_SIZE);
+  const showSource = fileNames.length > 1;
+
+  // Header
+  document.getElementById('tableHead').innerHTML = `<tr>
+    ${showSource ? '<th>Source</th>' : ''}
+    ${headers.map(h => `
+      <th onclick="sortBy('${h}')" class="${sortCol === h ? 'sort-' + sortDir : ''}">
+        ${h}
+      </th>`).join('')}
+  </tr>`;
+
+  // Body
+  if (!pageRows.length) {
+    document.getElementById('tableBody').innerHTML = '';
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('tableBody').innerHTML = pageRows.map(row => `
+    <tr>
+      ${showSource ? `<td><span class="source-badge">${row.__source.replace('.csv','')}</span></td>` : ''}
+      ${headers.map(h => `<td title="${escHtml(row[h] ?? '')}">${highlight(escHtml(String(row[h] ?? '')), query)}</td>`).join('')}
+    </tr>`).join('');
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  else { sortCol = col; sortDir = 'asc'; }
+  applyFilters();
+}
+
+function highlight(text, query) {
+  if (!query) return text;
+  const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  return text.replace(re, '<mark class="highlight">$1</mark>');
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Pagination ───────────────────────────────────────────────────
+function renderPagination() {
+  const total = Math.ceil(filtered.length / PAGE_SIZE);
+  const start = (page - 1) * PAGE_SIZE + 1;
+  const end = Math.min(page * PAGE_SIZE, filtered.length);
+  const pg = document.getElementById('pagination');
+
+  if (filtered.length === 0) { pg.innerHTML = ''; return; }
+
+  let pages = '';
+  const delta = 2;
+  for (let i = 1; i <= total; i++) {
+    if (i === 1 || i === total || (i >= page - delta && i <= page + delta)) {
+      pages += `<button class="page-btn ${i === page ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+    } else if (i === page - delta - 1 || i === page + delta + 1) {
+      pages += `<span style="color:var(--muted);padding:0 4px">…</span>`;
+    }
+  }
+
+  pg.innerHTML = `
+    <span class="pagination-info">Showing ${start}–${end} of ${filtered.length.toLocaleString()} records</span>
+    <div class="pagination-btns">
+      <button class="page-btn" onclick="goPage(${page - 1})" ${page === 1 ? 'disabled' : ''}>← Prev</button>
+      ${pages}
+      <button class="page-btn" onclick="goPage(${page + 1})" ${page === total ? 'disabled' : ''}>Next →</button>
+    </div>`;
+}
+
+function goPage(p) {
+  const total = Math.ceil(filtered.length / PAGE_SIZE);
+  page = Math.max(1, Math.min(total, p));
+  renderTable();
+  renderPagination();
+  document.querySelector('.table-wrap').scrollTop = 0;
+}
+
+// ── Download ─────────────────────────────────────────────────────
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if (!filtered.length) { showToast('No data to download'); return; }
+  const csv = Papa.unparse(filtered.map(row => {
+    const r = { ...row };
+    delete r.__source;
+    return r;
+  }), { columns: headers });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'filtered_export.csv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast(`Exported ${filtered.length} rows`);
+});
+
+// ── Toast ────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
